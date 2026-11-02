@@ -1,0 +1,10 @@
+import {test} from 'node:test'; import assert from 'node:assert/strict'; import {evaluate,checkAccount} from '../src/index.js';
+const base={receiver:'alice.near',amount:1,limit:5,trusted:true};
+test('trusted transaction within budget is allowed',()=>assert.equal(evaluate(base,{status:'found'}).decision,'allow'));
+test('budget and injected instructions block',()=>{assert.equal(evaluate({...base,amount:6},{status:'found'}).decision,'block');assert.equal(evaluate({...base,injection:true},{status:'found'}).decision,'block')});
+test('unknown recipient and RPC failure require review',()=>{assert.equal(evaluate({...base,trusted:false},{status:'found'}).decision,'warn');assert.equal(evaluate(base,{status:'error'}).decision,'warn')});
+test('missing account blocks',()=>assert.equal(evaluate(base,{status:'missing'}).decision,'block'));
+test('RPC parser returns chain data',async()=>{let result=await checkAccount('alice.near','mainnet',async()=>({ok:true,json:async()=>({result:{code_hash:'abc',block_height:10}})}));assert.equal(result.status,'found');assert.equal(result.blockHeight,10)});
+import {guardedAction} from '../src/guard.js';
+test('guard never executes blocked or unapproved proposals',async()=>{let called=0;const execute=()=>++called;for(const decision of ['block','warn']){let r=await guardedAction({proposal:{},check:async()=>({decision}),approve:async()=>false,execute});assert.equal(r.executed,false)}assert.equal(called,0)});
+test('guard executes reviewed proposal only after approval',async()=>{let r=await guardedAction({proposal:{},check:async()=>({decision:'warn'}),approve:async()=>true,execute:async()=>42});assert.equal(r.result,42)});
