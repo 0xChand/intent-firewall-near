@@ -8,3 +8,5 @@ test('RPC parser returns chain data',async()=>{let result=await checkAccount('al
 import {guardedAction} from '../src/guard.js';
 test('guard never executes blocked or unapproved proposals',async()=>{let called=0;const execute=()=>++called;for(const decision of ['block','warn']){let r=await guardedAction({proposal:{},check:async()=>({decision}),approve:async()=>false,execute});assert.equal(r.executed,false)}assert.equal(called,0)});
 test('guard executes reviewed proposal only after approval',async()=>{let r=await guardedAction({proposal:{},check:async()=>({decision:'warn'}),approve:async()=>true,execute:async()=>42});assert.equal(r.result,42)});
+import {actionCreators} from '@near-js/transactions';
+test('wallet action uses NEAR transaction representation and exact yocto deposit',()=>{const action=actionCreators.functionCall('deposit',{},50000000000000n,1000000000000000000000000n);assert.equal(action.functionCall.methodName,'deposit');assert.equal(action.functionCall.deposit,1000000000000000000000000n)});

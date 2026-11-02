@@ -1,1 +1,23 @@
-{"name":"intent-firewall","version":"1.0.0","private":true,"type":"module","scripts":{"test":"node --test","dev":"wrangler dev","deploy":"wrangler deploy"},"devDependencies":{"wrangler":"^4.0.0"}}
+{
+  "name": "intent-firewall",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "esbuild src/dashboard.js --bundle --format=esm --minify --outfile=public/dashboard.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "@near-js/transactions": "^2.5.1",
+    "@near-wallet-selector/core": "^10.1.4",
+    "@near-wallet-selector/modal-ui": "^10.1.4",
+    "@near-wallet-selector/my-near-wallet": "^10.1.4",
+    "esbuild": "^0.28.2",
+    "util": "^0.12.5"
+  }
+}

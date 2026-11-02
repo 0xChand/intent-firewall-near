@@ -1,20 +1,52 @@
 # Intent Firewall
 
-An explainable pre-signing checkpoint for NEAR agent payment proposals, built for NEAR Hackathon 2026, AI Security & Defense. A Cloudflare Worker checks whether a receiver exists using NEAR RPC, then evaluates an explicit per-action budget and caller-supplied trust, blocklist and injection flags. It returns allow, warn, or block with reasons. A small agent wrapper gates an injected execute callback on the policy outcome and human approval.
+A testnet vault for AI agents: the owner funds a NEAR smart contract and configures an agent account, per-payment and UTC-day budgets, an allowlist, and an emergency pause. The agent can request native NEAR transfers only through the vault's `pay` method. The contract enforces its rules before creating a transfer. The Cloudflare Workers dashboard reads the actual contract state and can send owner and agent calls through MyNearWallet.
 
-## Try it
+**Live dashboard:** https://near-intent-firewall.rathichand2.workers.dev  
+**Demonstration vault:** `intent-firewall-20261102.testnet`  
+**Successful restricted-key payment:** https://testnet.nearblocks.io/txns/BXx2u25iLWrtRJq6vPcSqCDqaXDVZq6CmWcgkaDLiMUM
 
-1. Install Node.js 20+ and run `npm install` then `npm run dev`.
-2. Open the local URL. The default `near` account, 2 NEAR amount, 5 NEAR limit and trusted flag should return ALLOW when mainnet RPC is available.
-3. Uncheck trusted and evaluate again: see HUMAN REVIEW. Click Load attack scenario: see BLOCK and the reasons.
-4. Run `npm test` to exercise policy decisions, RPC parsing and the guard boundary.
+## Try the hosted dashboard
 
-POST `/api/check` accepts `{ "receiver": "near", "amount": 2, "limit": 5, "network": "mainnet", "trusted": true, "blocked": false, "injection": false }`. It returns a decision, reasons and RPC status. `src/guard.js` demonstrates calling policy before an action and requires explicit approval for warn. Integrators must protect that boundary and independently authenticate policy and approval requests.
+1. Open the dashboard and wait for live vault state. The demo vault is controlled by the developer's testnet account; you may inspect it without a wallet.
+2. To make changes, deploy your own vault using the instructions below. Paste its account ID into the dashboard, connect the appropriate testnet wallet and read the state.
+3. As owner, set an agent, limits and allowed recipient. Fund the vault with testnet NEAR. As the agent account, submit a payment to an allowlisted account under the limits. A different receiver, excess amount, unauthorized caller or paused vault causes a rejected transaction.
+4. Pause the vault in the owner policy section to stop subsequent payments. The owner can withdraw available funds to the owner account.
 
-## Scope and security
+## Run locally
 
-This is a prototype, not a deployed wallet, smart contract, or transaction signer. No assets are held or moved. Trust, blocklist, injection flags and limits are supplied by the client; the demo does not detect injection automatically, verify historical reputation, or provide tamper-resistant storage. It is not safe to rely on the public endpoint for real funds. RPC errors produce warn, and the wrapper stops unless a human explicitly approves. Account existence is a point-in-time read, not proof of safety. Amounts use JavaScript numbers and are illustrative, not suitable for token accounting.
+Install Node.js 20+ and Rust with `wasm32-unknown-unknown`, then:
 
-For production, enforce a policy in an independently controlled contract, use exact integer token units, authenticated approvals and durable rules, and audit the integration. NEAR function-call access keys can be limited to a receiver contract and method names, but cannot make native NEAR transfers or attach deposits; they do not protect against unsafe behavior inside the allowed contract. A full-access key is not used here. No testnet or mainnet contract is deployed.
+```sh
+npm ci
+npm run build
+npm test
+npm run dev
+```
 
-Built from scratch during the hackathon window. Runtime is Cloudflare Workers; local tooling uses Wrangler. No NEAR AI model or third-party blocklist is claimed.
+Open the URL printed by Wrangler. To build the contract using near-sdk 5.30's NEAR host configuration:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cd contract
+RUSTFLAGS="--cfg near" cargo build --locked --target wasm32-unknown-unknown --release
+cargo test --locked --lib
+```
+
+Use the resulting `target/wasm32-unknown-unknown/release/intent_firewall_vault.wasm`. Deploy to a fresh testnet account that you control, initializing atomically with `new` and JSON arguments such as:
+
+```json
+{"owner":"YOUR_OWNER.testnet","agent":"YOUR_AGENT.testnet","per_payment":"1000000000000000000000000","daily_limit":"3000000000000000000000000"}
+```
+
+Amounts are integer yoctoNEAR strings. Initialization must be called by the contract account itself. Use separate accounts and keys for the contract, owner and agent; keep the contract's full-access deployment key and the owner's key away from the agent. An agent key should be a NEAR function-call access key restricted to the vault account and `pay`, with a bounded gas allowance. The agent account must have enough balance for gas. A function-call key cannot attach a deposit or directly transfer NEAR; it can only call allowed methods on its configured receiver. The contract sends from its own balance after checking the policy. Rotating/revoking an agent key and changing the contract's agent are separate operations.
+
+## Security model and boundaries
+
+Experimental, unaudited, **testnet only**. No mainnet deployment is represented here. The allowlist is controlled by the owner, not a reputation service. The contract checks caller identity, pause state, recipient, per-payment and UTC-calendar-day limits, and reserves funds for pending transfers while protecting the storage stake. Failed transfers still consume the daily budget, conservatively. The balance shown includes the storage stake and should not be interpreted as fully withdrawable. The deployer retains the vault account's full-access key and can upgrade the contract; that key is a root of trust. The demo agent account also has a separately held full-access recovery key; the actual successful agent transaction linked above used a different key scoped to `pay`. This design does not detect prompt injection or provide independent third-party security audits. It restricts the blast radius when instructions cause an agent to request a forbidden payment.
+
+## Verification
+
+Contract unit tests cover unauthorized admin calls, non-allowlisted recipients, payment limit, pause and unauthorized agent. A live testnet transaction used a `pay`-only function-call access key and transferred 0.01 test NEAR to `testnet`; the on-chain callback reported success. Live tests also rejected excess and unlisted payments. Worker policy tests cover the earlier preflight checker, retained as an optional informational API; it is not the vault's enforcement boundary.
+
+Built for the NEAR Hackathon 2026 AI Security & Defense track. Source uses near-sdk, NEAR Wallet Selector, MyNearWallet, Wrangler and esbuild. New code was written during the event window.
